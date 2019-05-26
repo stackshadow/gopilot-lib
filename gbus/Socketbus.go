@@ -21,11 +21,12 @@ package gbus
 import (
 	"errors"
 	"fmt"
-	"github.com/stackshadow/gopilot-lib/clog"
-	mynodename "github.com/stackshadow/gopilot-lib/nodeName"
 	"net"
 	"os"
 	"time"
+
+	"github.com/stackshadow/gopilot-lib/clog"
+	"github.com/stackshadow/gopilot-lib/mynodename"
 
 	"github.com/google/uuid"
 )
