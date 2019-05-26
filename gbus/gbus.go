@@ -19,7 +19,7 @@ along with gopilot.  If not, see <http://www.gnu.org/licenses/>.
 package gbus
 
 import (
-	"gopilot/msgbus"
+	"github.com/stackshadow/gopilot-lib/msgbus"
 )
 
 // OnMessageFct represents the callback-function when a new message arrived and match the filter

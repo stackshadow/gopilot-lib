@@ -21,7 +21,7 @@ package msgbus
 import (
 	"fmt"
 	"github.com/google/uuid"
-	"gopilot/clog"
+	"github.com/stackshadow/gopilot-lib/clog"
 	"strconv"
 	"sync"
 )

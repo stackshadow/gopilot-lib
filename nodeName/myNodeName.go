@@ -2,7 +2,7 @@ package mynodename
 
 import (
 	"flag"
-	"gopilot/clog"
+	"github.com/stackshadow/gopilot-lib/clog"
 	"os"
 )
 

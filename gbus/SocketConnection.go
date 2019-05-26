@@ -23,7 +23,7 @@ package gbus
 import (
 	"bufio"
 	"fmt"
-	"gopilot/clog"
+	"github.com/stackshadow/gopilot-lib/clog"
 	"net"
 )
 

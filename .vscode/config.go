@@ -2,7 +2,7 @@ package config
 
 import (
 	"encoding/json"
-	"github.com/stackshadow/gopilot-lib/clog"
+	"gopilot/clog"
 
 	"flag"
 	"fmt"
