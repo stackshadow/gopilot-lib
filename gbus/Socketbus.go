@@ -84,7 +84,11 @@ func (bus *Socketbus) Serve(connectionString string) error {
 			return err
 		}
 
-		bus.log.Info(fmt.Sprintf("Accept new client %v", conn.RemoteAddr()))
+		connectionID := "IN-" + uuid.New().String()
+
+		bus.log.WithFields(logrus.Fields{
+			"cid": connectionID,
+		}).Info("Accept new client")
 
 		// create a new session
 		// the filter is empty, as server we accept every message
@@ -92,7 +96,7 @@ func (bus *Socketbus) Serve(connectionString string) error {
 		con.Init(conn, Msg{
 			NodeTarget:  mynodename.NodeName,
 			GroupTarget: "",
-		}, "IN-"+uuid.New().String())
+		}, connectionID)
 
 		// ################################# handshake #################################
 		// send a helo to the client
