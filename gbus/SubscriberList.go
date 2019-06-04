@@ -18,11 +18,10 @@ along with gopilot.  If not, see <http://www.gnu.org/licenses/>.
 
 package gbus
 
-import ()
-import "sync"
-
-// callbacks
-type OnMessageFct func(*Msg, string /* group */, string /*command*/, string /*payload*/) // For example: onMessage(message *msgbus.Msg, group, command, payload string)
+import (
+	"github.com/sirupsen/logrus"
+	"sync"
+)
 
 // subscriber represents an subscription to a message ( filter ) on the bus
 // all fields in the filter must match the message which arrived on the bus
@@ -34,8 +33,12 @@ type subscriber struct {
 	onMessage OnMessageFct
 }
 
+// callbacks
+type OnMessageFct func(*Msg, string /* group */, string /*command*/, string /*payload*/) // For example: onMessage(message *msgbus.Msg, group, command, payload string)
+
 // SubscriberList represent the list for all subcribers
 type SubscriberList struct {
+	log      *logrus.Entry
 	lock     sync.Mutex
 	list     []subscriber
 	messages chan *Msg
@@ -43,6 +46,12 @@ type SubscriberList struct {
 
 // Init the subscriber list
 func (list *SubscriberList) Init() {
+
+	list.log = logrus.WithFields(
+		logrus.Fields{
+			"prefix": "SLIST",
+		},
+	)
 	list.messages = make(chan *Msg, 5)
 
 	// start the worker
@@ -65,6 +74,14 @@ func (list *SubscriberList) onPublishListWorker() {
 				continue
 			}
 
+			list.log.WithFields(logrus.Fields{
+				"subscriberNodeTarget":  subscriber.filter.NodeTarget,
+				"subscriberGroupTarget": subscriber.filter.GroupTarget,
+
+				"messageNodeTarget":  message.NodeTarget,
+				"messageGroupTarget": message.GroupTarget,
+			}).Debug("Message match, call onMessage()")
+
 			subscriber.onMessage(message, message.GroupTarget, message.Command, message.Payload)
 		}
 
@@ -78,12 +95,20 @@ func (list *SubscriberList) onPublishListWorker() {
 func (list *SubscriberList) Subscribe(id string, listenForNodeName string, listenForGroupName string, onMessageFP OnMessageFct) error {
 
 	var newSubscriber subscriber
+	newSubscriber.id = id
 	newSubscriber.filter.NodeTarget = listenForNodeName
 	newSubscriber.filter.GroupTarget = listenForGroupName
 	newSubscriber.onMessage = onMessageFP
 
 	// append it to the list
 	list.lock.Lock()
+
+	list.log.WithFields(logrus.Fields{
+		"sid":                   id,
+		"subscriberNodeTarget":  newSubscriber.filter.NodeTarget,
+		"subscriberGroupTarget": newSubscriber.filter.GroupTarget,
+	}).Debug("Subscribe")
+
 	list.list = append(list.list, newSubscriber)
 	list.lock.Unlock()
 
@@ -109,16 +134,22 @@ func (list *SubscriberList) unSubscribeFull(id string, listenForNodeName string,
 
 		if id != "" && subscriber.id != id {
 			newList = append(newList, subscriber)
+			continue
 		}
 
 		if listenForNodeName != "" && subscriber.filter.NodeTarget != listenForNodeName {
 			newList = append(newList, subscriber)
+			continue
 		}
 
 		if listenForGroupName != "" && subscriber.filter.GroupTarget != listenForGroupName {
 			newList = append(newList, subscriber)
+			continue
 		}
 
+		list.log.WithFields(logrus.Fields{
+			"sid": subscriber.id,
+		}).Debug("UnSubscribe")
 	}
 	list.list = newList
 	list.lock.Unlock()
