@@ -58,13 +58,13 @@ func (s *SocketConnection) Init(socket net.Conn, filter Msg, id string) {
 func (s *SocketConnection) ReadMessage() (Msg, error) {
 
 	s.logging.WithFields(logrus.Fields{
-		"id":         s.ID,
+		"cid":        s.ID,
 		"remoteAddr": s.socket.RemoteAddr().Network(),
 	}).Debug("Wait for message")
 
 	jsonString, _ := bufio.NewReader(s.socket).ReadString('\n')
 	s.logging.WithFields(logrus.Fields{
-		"id":  s.ID,
+		"cid": s.ID,
 		"raw": jsonString,
 	},
 	).Debug("Raw message")
@@ -84,7 +84,7 @@ func (s *SocketConnection) ReadMessage() (Msg, error) {
 
 	// debug
 	s.logging.WithFields(logrus.Fields{
-		"id":          s.ID,
+		"cid":         s.ID,
 		"mid":         newMessage.id,
 		"source":      newMessage.NodeSource,
 		"sourceGroup": newMessage.GroupSource,
@@ -138,7 +138,7 @@ func (s *SocketConnection) Close() {
 
 	// debug
 	s.logging.WithFields(logrus.Fields{
-		"id": s.ID,
+		"cid": s.ID,
 	},
 	).Info("Close connection")
 
