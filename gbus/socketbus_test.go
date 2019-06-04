@@ -20,8 +20,8 @@ package gbus
 
 import (
 	"fmt"
-	"gopilot/clog"
-	"gopilot/nodeName"
+	"github.com/stackshadow/gopilot-lib/clog"
+	"github.com/stackshadow/gopilot-lib/mynodename"
 	"testing"
 	"time"
 )

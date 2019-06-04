@@ -20,7 +20,7 @@ package msgbus
 import "testing"
 import "fmt"
 import "time"
-import "github.com/stackshadow/gopilot-lib/clog"
+import "github.com/stackshadow/gopilot/lib/clog"
 import "os"
 
 var testBus *MsgBus

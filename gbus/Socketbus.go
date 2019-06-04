@@ -21,19 +21,17 @@ package gbus
 import (
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
+	"github.com/stackshadow/gopilot-lib/mynodename"
 	"net"
 	"os"
 	"time"
-
-	"github.com/stackshadow/gopilot-lib/clog"
-	"github.com/stackshadow/gopilot-lib/mynodename"
-
-	"github.com/google/uuid"
 )
 
 // Socketbus type
 type Socketbus struct {
-	log clog.Logger
+	log *logrus.Entry
 	// remoteConnectionList map[string]*SocketConnection
 	subscriberList SubscriberList
 	serverListener net.Listener
@@ -44,7 +42,13 @@ type Socketbus struct {
 
 // Init will init an new socketbus
 func (bus *Socketbus) Init() {
-	bus.log = clog.New("SOCKETBUS")
+
+	bus.log = logrus.WithFields(
+		logrus.Fields{
+			"prefix": "SOCKETBUS",
+		},
+	)
+
 	bus.subscriberList.Init()
 	// bus.socketConnections = make(map[string]*SocketConnection)
 }
@@ -55,7 +59,7 @@ func (bus *Socketbus) Serve(connectionString string) error {
 
 	// remove socket if it already exists
 	if err := os.RemoveAll(connectionString); err != nil {
-		bus.log.Err(err)
+		bus.log.Error(err)
 		return err
 	}
 
@@ -63,7 +67,7 @@ func (bus *Socketbus) Serve(connectionString string) error {
 	var err error
 	bus.serverListener, err = net.Listen("unix", connectionString)
 	if err != nil {
-		bus.log.Err(err)
+		bus.log.Error(err)
 		return err
 	}
 
@@ -76,7 +80,7 @@ func (bus *Socketbus) Serve(connectionString string) error {
 		bus.log.Info("Wating for new client")
 		conn, err := bus.serverListener.Accept()
 		if err != nil {
-			bus.log.Err(err)
+			bus.log.Error(err)
 			return err
 		}
 
@@ -104,7 +108,7 @@ func (bus *Socketbus) Serve(connectionString string) error {
 		bus.log.Debug("Wait for OLEH-Message")
 		ehloMessage, err := con.ReadMessage()
 		if err != nil {
-			bus.log.Err(err)
+			bus.log.Error(err)
 			conn.Close()
 			continue
 		}
@@ -139,7 +143,7 @@ func (bus *Socketbus) Connect(connectionString string, filter Msg) (string, erro
 	for {
 		conn, err = net.Dial("unix", connectionString)
 		if err != nil {
-			bus.log.Err(err)
+			bus.log.Error(err)
 			time.Sleep(10 * time.Second)
 		}
 
@@ -158,12 +162,14 @@ func (bus *Socketbus) Connect(connectionString string, filter Msg) (string, erro
 	heloMessage, err := con.ReadMessage()
 	if err != nil {
 		con.Close()
-		return "", bus.log.Err(err)
-
+		bus.log.Error(err)
+		return "", err
 	}
 	if heloMessage.Command != "HELO" {
 		con.Close()
-		return "", bus.log.Err(errors.New("No OLEH was recieved"))
+		errNoHelo := errors.New("No OLEH was recieved")
+		bus.log.Error(errNoHelo)
+		return "", errNoHelo
 	}
 	bus.log.Debug("HELO received")
 
@@ -206,7 +212,7 @@ func (bus *Socketbus) eventLoopWaitForMessage(con *SocketConnection) {
 	for {
 		message, err := con.ReadMessage()
 		if err != nil {
-			bus.log.Err(err)
+			bus.log.Error(err)
 			break
 		}
 

@@ -21,6 +21,9 @@ package gbus
 import ()
 import "sync"
 
+// callbacks
+type OnMessageFct func(*Msg, string /* group */, string /*command*/, string /*payload*/) // For example: onMessage(message *msgbus.Msg, group, command, payload string)
+
 // subscriber represents an subscription to a message ( filter ) on the bus
 // all fields in the filter must match the message which arrived on the bus
 // fields with "" means "ignore the value"

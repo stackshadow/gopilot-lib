@@ -20,15 +20,12 @@ package clog
 
 import (
 	"flag"
-	"fmt"
+	"github.com/sirupsen/logrus"
+	prefixed "github.com/x-cray/logrus-prefixed-formatter"
 	"runtime"
 )
 
 var isDebug bool
-
-type Logger struct {
-	prefix string
-}
 
 func getCaller() string {
 	pc, _, _, ok := runtime.Caller(2)
@@ -45,34 +42,10 @@ func ParseCmdLine() {
 }
 
 func Init() {
-
-}
-
-func New(prefix string) Logger {
-	newLog := Logger{
-		prefix: prefix,
-	}
-	return newLog
-}
-
-func EnableDebug() {
-	isDebug = true
-}
-
-func (logging *Logger) Debug(message string) {
+	logrus.SetFormatter(&prefixed.TextFormatter{
+		FullTimestamp: true,
+	})
 	if isDebug == true {
-		fmt.Printf("[DEBUG] [%s] [%s] %s\n", logging.prefix, getCaller(), message)
+		logrus.SetLevel(logrus.DebugLevel)
 	}
-}
-
-func (logging *Logger) Info(message string) {
-	fmt.Printf("[INFO] [%s] [%s] %s\n", logging.prefix, getCaller(), message)
-}
-
-func (logging *Logger) Error(message string) {
-	fmt.Printf("[ERROR] [%s] [%s] %s\n", logging.prefix, getCaller(), message)
-}
-func (logging *Logger) Err(err error) error {
-	fmt.Printf("[ERROR] [%s] [%s] %s\n", logging.prefix, getCaller(), err.Error())
-	return err
 }

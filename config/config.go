@@ -2,7 +2,7 @@ package config
 
 import (
 	"encoding/json"
-	"github.com/stackshadow/gopilot-lib/clog"
+	log "github.com/sirupsen/logrus"
 
 	"flag"
 	"fmt"
@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 )
 
-var logging clog.Logger
+var logging *log.Entry
 
 // ConfigPath the path where all config files will stored
 var ConfigPath string
@@ -26,7 +26,11 @@ func ParseCmdLine() {
 
 // Init create an new empty config
 func Init() {
-	logging = clog.New("CORE")
+	logging = log.WithFields(
+		log.Fields{
+			"module": "CONFIG",
+		},
+	)
 
 	jsonConfigNew = make(map[string]interface{})
 }
@@ -38,7 +42,7 @@ func Read() {
 	ex, err := os.Executable()
 	if err == nil {
 		exPath := filepath.Dir(ex)
-		logging.Debug("CONFIG Our current path is '" + exPath + "'")
+		logging.Debug("Our current path is '" + exPath + "'")
 	}
 
 	// Open our jsonFile
@@ -50,7 +54,7 @@ func Read() {
 	}
 	defer jsonFile.Close()
 
-	logging.Debug("CONFIG Successfully Opened '" + ConfigPath + "/core.json'")
+	logging.Debug("Successfully Opened '" + ConfigPath + "/core.json'")
 	byteValue, _ := ioutil.ReadAll(jsonFile)
 	err = json.Unmarshal(byteValue, &jsonConfigNew)
 
@@ -81,7 +85,7 @@ func Save() {
 	byteValue, _ := json.MarshalIndent(jsonConfigNew, "", "    ")
 	err := ioutil.WriteFile(ConfigPath+"/core.json", byteValue, 0644)
 	if err != nil {
-		logging.Error("CONFIG" + err.Error())
+		logging.Error(err.Error())
 		os.Exit(-1)
 	}
 }

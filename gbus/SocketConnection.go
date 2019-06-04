@@ -23,7 +23,7 @@ package gbus
 import (
 	"bufio"
 	"fmt"
-	"github.com/stackshadow/gopilot-lib/clog"
+	"github.com/sirupsen/logrus"
 	"net"
 )
 
@@ -33,7 +33,7 @@ const recvBufferSize int = 2048
 
 // SocketConnection represent an current socket-session ( socket connection )
 type SocketConnection struct {
-	logging clog.Logger
+	logging *logrus.Entry
 	ID      string
 	socket  net.Conn // our socket
 	lastID  int
@@ -42,9 +42,13 @@ type SocketConnection struct {
 // Init will init an socket-connection
 func (s *SocketConnection) Init(socket net.Conn, filter Msg, id string) {
 
-	s.logging = clog.New(id)
 	s.ID = id
 	s.socket = socket
+	s.logging = logrus.WithFields(
+		logrus.Fields{
+			"prefix": "CON-" + id,
+		},
+	)
 
 	s.logging.Debug(fmt.Sprintf("Created new session with filter %+v", filter))
 }
@@ -53,14 +57,21 @@ func (s *SocketConnection) Init(socket net.Conn, filter Msg, id string) {
 // this function is synchron ( blocked if no message is aviable ! )
 func (s *SocketConnection) ReadMessage() (Msg, error) {
 
-	s.logging.Debug(fmt.Sprintf("Wait for message [%s]", s.socket.RemoteAddr().Network()))
+	s.logging.WithFields(logrus.Fields{
+		"id":         s.ID,
+		"remoteAddr": s.socket.RemoteAddr().Network(),
+	}).Debug("Wait for message")
 
 	jsonString, _ := bufio.NewReader(s.socket).ReadString('\n')
-	s.logging.Debug(jsonString)
+	s.logging.WithFields(logrus.Fields{
+		"id":  s.ID,
+		"raw": jsonString,
+	},
+	).Debug("Raw message")
 
 	newMessage, err := FromJSONString(jsonString)
 	if err != nil {
-		s.logging.Err(err)
+		s.logging.Error(err)
 		return Msg{}, err
 	}
 
@@ -72,10 +83,16 @@ func (s *SocketConnection) ReadMessage() (Msg, error) {
 	s.lastID = s.lastID + 1
 
 	// debug
-	s.logging.Debug(fmt.Sprintf(
-		"[CON %s][MSG %d] Recieved Message from %s/%s to %s/%s/%s",
-		s.ID, newMessage.id, newMessage.NodeSource, newMessage.GroupSource, newMessage.NodeTarget, newMessage.GroupTarget, newMessage.Command,
-	))
+	s.logging.WithFields(logrus.Fields{
+		"id":          s.ID,
+		"mid":         newMessage.id,
+		"source":      newMessage.NodeSource,
+		"sourceGroup": newMessage.GroupSource,
+		"target":      newMessage.NodeTarget,
+		"targetGroup": newMessage.GroupTarget,
+		"command":     newMessage.Command,
+	},
+	).Debug("Recieved Message")
 
 	return newMessage, nil
 }
@@ -85,7 +102,11 @@ func (s *SocketConnection) SendMessage(message Msg) {
 
 	// we don't send messages that comes from us
 	if message.context == s.ID {
-		s.logging.Debug(fmt.Sprintf("[MSG %d] We dont send to sender", message.id))
+		s.logging.WithFields(logrus.Fields{
+			"mid": message.id,
+		},
+		).Debug("We dont send to sender")
+
 		return
 	}
 
@@ -97,10 +118,16 @@ func (s *SocketConnection) SendMessage(message Msg) {
 	newMessageString, _ := message.ToJSONString()
 
 	// debug
-	s.logging.Debug(fmt.Sprintf(
-		"[CON %s][MSG %d] Send Message from %s/%s to %s/%s/%s",
-		s.ID, message.id, message.NodeSource, message.GroupSource, message.NodeTarget, message.GroupTarget, message.Command,
-	))
+	s.logging.WithFields(logrus.Fields{
+		"id":          s.ID,
+		"mid":         message.id,
+		"source":      message.NodeSource,
+		"sourceGroup": message.GroupSource,
+		"target":      message.NodeTarget,
+		"targetGroup": message.GroupTarget,
+		"command":     message.Command,
+	},
+	).Debug("Send Message")
 
 	// send it
 	fmt.Fprintf(s.socket, "%s\n", newMessageString)
@@ -110,10 +137,10 @@ func (s *SocketConnection) SendMessage(message Msg) {
 func (s *SocketConnection) Close() {
 
 	// debug
-	s.logging.Info(fmt.Sprintf(
-		"[CON %s] Close connection",
-		s.ID,
-	))
+	s.logging.WithFields(logrus.Fields{
+		"id": s.ID,
+	},
+	).Info("Close connection")
 
 	s.socket.Close()
 }

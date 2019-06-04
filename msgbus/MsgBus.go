@@ -21,14 +21,14 @@ package msgbus
 import (
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/stackshadow/gopilot-lib/clog"
+	"github.com/sirupsen/logrus"
 	"strconv"
 	"sync"
 )
 
 // MsgBus represents a single bus
 type MsgBus struct {
-	log            clog.Logger
+	log            *logrus.Entry
 	list           chan Msg
 	lastID         int
 	listeners      []MsgListener
@@ -52,7 +52,11 @@ type onMessageFct func(*Msg, string /* group */, string /*command*/, string /*pa
 func New() *MsgBus {
 
 	newBus := MsgBus{
-		log:    clog.New("MSGBUS"),
+		log: logrus.WithFields(
+			logrus.Fields{
+				"prefix": "SOCKETBUS",
+			},
+		),
 		list:   make(chan Msg, 10),
 		lastID: 0,
 	}

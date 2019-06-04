@@ -2,7 +2,7 @@ package mynodename
 
 import (
 	"flag"
-	"github.com/stackshadow/gopilot-lib/clog"
+	log "github.com/sirupsen/logrus"
 	"os"
 )
 
@@ -23,7 +23,7 @@ func ParseCmdLine() {
 
 // Init the nodename
 func Init() {
-	logging := clog.New("NODENAME")
-
-	logging.Info("HOST MyNode: " + NodeName)
+	log.WithFields(log.Fields{
+		"nodename": NodeName,
+	}).Info()
 }
