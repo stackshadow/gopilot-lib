@@ -30,18 +30,14 @@ import (
 )
 
 // Socketbus type
-type Socketbus struct {
-	log *logrus.Entry
-	// remoteConnectionList map[string]*SocketConnection
-	subscriberList SubscriberList
+type Socket struct {
+	log            *logrus.Entry
 	serverListener net.Listener
 	isServer       bool
-	//	socketConnectionsLock sync.Mutex
-	//	socketConnections     map[string]*SocketConnection
 }
 
 // Init will init an new socketbus
-func (bus *Socketbus) Init() {
+func (bus *Socket) Init() {
 
 	bus.log = logrus.WithFields(
 		logrus.Fields{
@@ -49,13 +45,11 @@ func (bus *Socketbus) Init() {
 		},
 	)
 
-	bus.subscriberList.Init()
-	// bus.socketConnections = make(map[string]*SocketConnection)
 }
 
 // Serve [BLOCKING] will start the socket-server and run forever until an error occure
 // if an connection occure and the handshake was okay, an goroutine will be started which handle incoming messages
-func (bus *Socketbus) Serve(connectionString string) error {
+func (socket *Socket) Serve(bus *GBus, connectionString string) error {
 
 	// remove socket if it already exists
 	if err := os.RemoveAll(connectionString); err != nil {
@@ -65,38 +59,31 @@ func (bus *Socketbus) Serve(connectionString string) error {
 
 	// open the socket
 	var err error
-	bus.serverListener, err = net.Listen("unix", connectionString)
+	socket.serverListener, err = net.Listen("unix", connectionString)
 	if err != nil {
 		bus.log.Error(err)
 		return err
 	}
 
-	bus.log.Info(fmt.Sprintf("Create SOCKET on %s", connectionString))
+	socket.log.Info(fmt.Sprintf("Create SOCKET on %s", connectionString))
 
 	// wait for new clients
 	for {
 
 		// wait for a new client
-		bus.log.Info("Wating for new client")
-		conn, err := bus.serverListener.Accept()
+		socket.log.Info("Wating for new client")
+		conn, err := socket.serverListener.Accept()
 		if err != nil {
 			bus.log.Error(err)
 			return err
 		}
 
-		connectionID := "IN-" + uuid.New().String()
-
-		bus.log.WithFields(logrus.Fields{
-			"cid": connectionID,
-		}).Info("Accept new client")
+		connectionID := uuid.New().String()
 
 		// create a new session
 		// the filter is empty, as server we accept every message
 		var con SocketConnection
-		con.Init(conn, Msg{
-			NodeTarget:  mynodename.NodeName,
-			GroupTarget: "",
-		}, connectionID)
+		con.Init(conn, connectionID)
 
 		// ################################# handshake #################################
 		// send a helo to the client
@@ -109,7 +96,7 @@ func (bus *Socketbus) Serve(connectionString string) error {
 		})
 
 		// we wait for OLEH
-		bus.log.Debug("Wait for OLEH-Message")
+		socket.log.Debug("Wait for OLEH-Message")
 		ehloMessage, err := con.ReadMessage()
 		if err != nil {
 			bus.log.Error(err)
@@ -121,7 +108,7 @@ func (bus *Socketbus) Serve(connectionString string) error {
 			conn.Close()
 			continue
 		}
-		bus.log.Debug("OLEH received")
+		socket.log.Debug("OLEH received")
 
 		/*
 			bus.socketConnectionsLock.Lock()
@@ -130,16 +117,16 @@ func (bus *Socketbus) Serve(connectionString string) error {
 			bus.socketConnectionsLock.Unlock()
 		*/
 		// we subscribe to the bus
-		bus.subscriberList.Subscribe(con.ID, ehloMessage.NodeSource, ehloMessage.GroupSource, con.onPublish)
+		bus.Subscribe(con.ID, ehloMessage.NodeSource, ehloMessage.GroupSource, con.onPublish)
 
 		// start goroutine which handle incoming messages
-		go bus.eventLoopWaitForMessage(&con)
+		go socket.eventLoopWaitForMessage(bus, &con)
 	}
 
 }
 
 // Connect [GOROUTINE] will connect to an server and return the remote Node-Name
-func (bus *Socketbus) Connect(connectionString string, filter Msg) (string, error) {
+func (socket *Socket) Connect(bus *GBus, connectionString string, filter Msg) (string, error) {
 
 	var conn net.Conn
 	var err error
@@ -158,11 +145,11 @@ func (bus *Socketbus) Connect(connectionString string, filter Msg) (string, erro
 
 	// create a new socket connection
 	var con SocketConnection
-	con.Init(conn, filter, "OUT-"+uuid.New().String())
+	con.Init(conn, uuid.New().String())
 
 	// ################################# handshake #################################
 	// we wait for HELO
-	bus.log.Debug("Wait for HELO-Message")
+	socket.log.Debug("Wait for HELO-Message")
 	heloMessage, err := con.ReadMessage()
 	if err != nil {
 		con.Close()
@@ -175,7 +162,7 @@ func (bus *Socketbus) Connect(connectionString string, filter Msg) (string, erro
 		bus.log.Error(errNoHelo)
 		return "", errNoHelo
 	}
-	bus.log.Debug("HELO received")
+	socket.log.Debug("HELO received")
 
 	// and informate the server about what we listen
 	con.SendMessage(Msg{
@@ -187,7 +174,7 @@ func (bus *Socketbus) Connect(connectionString string, filter Msg) (string, erro
 	})
 
 	// we subscribe to the bus
-	bus.subscriberList.Subscribe(con.ID, heloMessage.NodeSource, heloMessage.GroupSource, con.onPublish)
+	bus.Subscribe(con.ID, heloMessage.NodeSource, heloMessage.GroupSource, con.onPublish)
 
 	// add it to the list
 	/*
@@ -197,19 +184,19 @@ func (bus *Socketbus) Connect(connectionString string, filter Msg) (string, erro
 		bus.sessionListMutex.Unlock()
 	*/
 
-	go bus.eventLoopWaitForMessage(&con)
+	go socket.eventLoopWaitForMessage(bus, &con)
 
 	return heloMessage.NodeSource, nil
 }
 
-func (bus *Socketbus) eventLoopWaitForMessage(con *SocketConnection) {
+func (socket *Socket) eventLoopWaitForMessage(bus *GBus, con *SocketConnection) {
 
 	// close and remove session if disconnect or error occure
 	defer func() {
 		con.logging.Debug(fmt.Sprintf("Close '%s'", con.ID))
 		con.Close()
 
-		bus.subscriberList.UnSubscribeID(con.ID)
+		bus.UnSubscribeID(con.ID)
 	}()
 
 	// message-loop
@@ -220,22 +207,7 @@ func (bus *Socketbus) eventLoopWaitForMessage(con *SocketConnection) {
 			break
 		}
 
-		bus.subscriberList.PublishMsg(message)
+		bus.PublishMsg(message)
 	}
 
-}
-
-// Subscribe will subscribe to an message on the bus
-func (bus *Socketbus) Subscribe(id string, listenForNodeName string, listenForGroupName string, onMessageFP OnMessageFct) error {
-	return bus.subscriberList.Subscribe(id, listenForNodeName, listenForGroupName, onMessageFP)
-}
-
-// PublishPayload will place a message to the bus
-func (bus *Socketbus) PublishPayload(nodeSource, nodeTarget, groupSource, groupTarget, command, payload string) error {
-	return bus.subscriberList.PublishPayload(nodeSource, nodeTarget, groupSource, groupTarget, command, payload)
-}
-
-// PublishMsg will place a message to the bus
-func (bus *Socketbus) PublishMsg(message Msg) error {
-	return bus.subscriberList.PublishMsg(message)
 }

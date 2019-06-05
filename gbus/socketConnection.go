@@ -40,31 +40,28 @@ type SocketConnection struct {
 }
 
 // Init will init an socket-connection
-func (s *SocketConnection) Init(socket net.Conn, filter Msg, id string) {
+func (s *SocketConnection) Init(socket net.Conn, id string) {
 
 	s.ID = id
 	s.socket = socket
 	s.logging = logrus.WithFields(
 		logrus.Fields{
-			"prefix": "CON-" + id,
+			"prefix": "SCON",
+			"cid":    s.ID,
 		},
 	)
 
-	s.logging.Debug(fmt.Sprintf("Created new session with filter %+v", filter))
+	s.logging.Debug("New Socket-connection created")
 }
 
 // ReadMessage will call the onMessage if an message is recieved
 // this function is synchron ( blocked if no message is aviable ! )
 func (s *SocketConnection) ReadMessage() (Msg, error) {
 
-	s.logging.WithFields(logrus.Fields{
-		"cid":        s.ID,
-		"remoteAddr": s.socket.RemoteAddr().Network(),
-	}).Debug("Wait for message")
+	s.logging.Debug("Wait for message")
 
 	jsonString, _ := bufio.NewReader(s.socket).ReadString('\n')
 	s.logging.WithFields(logrus.Fields{
-		"cid": s.ID,
 		"raw": jsonString,
 	},
 	).Debug("Raw message")
@@ -84,7 +81,6 @@ func (s *SocketConnection) ReadMessage() (Msg, error) {
 
 	// debug
 	s.logging.WithFields(logrus.Fields{
-		"cid":         s.ID,
 		"mid":         newMessage.id,
 		"source":      newMessage.NodeSource,
 		"sourceGroup": newMessage.GroupSource,
@@ -119,7 +115,7 @@ func (s *SocketConnection) SendMessage(message Msg) {
 
 	// debug
 	s.logging.WithFields(logrus.Fields{
-		"id":          s.ID,
+		"cid":         s.ID,
 		"mid":         message.id,
 		"source":      message.NodeSource,
 		"sourceGroup": message.GroupSource,

@@ -28,45 +28,52 @@ import (
 // fields with "" means "ignore the value"
 // this is an INTERNAL struct, so will not be used by userland
 type subscriber struct {
-	id        string
-	filter    Msg
-	onMessage OnMessageFct
+	id          string
+	filter      Msg
+	displayName string
+	onMessage   OnMessageFct
 }
 
 // callbacks
 type OnMessageFct func(*Msg, string /* group */, string /*command*/, string /*payload*/) // For example: onMessage(message *msgbus.Msg, group, command, payload string)
 
 // SubscriberList represent the list for all subcribers
-type SubscriberList struct {
-	log      *logrus.Entry
-	lock     sync.Mutex
-	list     []subscriber
-	messages chan *Msg
+type GBus struct {
+	log         *logrus.Entry
+	lock        sync.Mutex
+	subscribers []subscriber
+	messages    chan *Msg
 }
 
 // Init the subscriber list
-func (list *SubscriberList) Init() {
+func (bus *GBus) Init() {
 
-	list.log = logrus.WithFields(
+	bus.log = logrus.WithFields(
 		logrus.Fields{
 			"prefix": "SLIST",
 		},
 	)
-	list.messages = make(chan *Msg, 5)
+	bus.messages = make(chan *Msg, 5)
 
 	// start the worker
-	go list.onPublishListWorker()
+	go bus.onPublishListWorker()
 }
 
-func (list *SubscriberList) onPublishListWorker() {
+func (bus *GBus) onPublishListWorker() {
 	// blocking until message arive
-	for message := range list.messages {
+	for message := range bus.messages {
 
 		// lock the list
-		list.lock.Lock()
+		bus.lock.Lock()
+
+		bus.log.WithFields(logrus.Fields{
+			"message.NodeTarget":  message.NodeTarget,
+			"message.GroupTarget": message.GroupTarget,
+			"message.Command":     message.Command,
+		}).Debug("Handle message")
 
 		// send it to all subscribers
-		for _, subscriber := range list.list {
+		for _, subscriber := range bus.subscribers {
 			if subscriber.filter.NodeTarget != "" && message.NodeTarget != subscriber.filter.NodeTarget {
 				continue
 			}
@@ -74,25 +81,23 @@ func (list *SubscriberList) onPublishListWorker() {
 				continue
 			}
 
-			list.log.WithFields(logrus.Fields{
-				"subscriberNodeTarget":  subscriber.filter.NodeTarget,
-				"subscriberGroupTarget": subscriber.filter.GroupTarget,
-
-				"messageNodeTarget":  message.NodeTarget,
-				"messageGroupTarget": message.GroupTarget,
+			bus.log.WithFields(logrus.Fields{
+				"subscriber.id":          subscriber.id,
+				"subscriber.NodeTarget":  subscriber.filter.NodeTarget,
+				"subscriber.GroupTarget": subscriber.filter.GroupTarget,
 			}).Debug("Message match, call onMessage()")
 
 			subscriber.onMessage(message, message.GroupTarget, message.Command, message.Payload)
 		}
 
 		// unlock the list
-		list.lock.Unlock()
+		bus.lock.Unlock()
 	}
 }
 
 // Subscribe will register an callback function
 // this function is called wenn a new message arrive and the listenForNodeName and listenForGroupName matches the target node/group in the message
-func (list *SubscriberList) Subscribe(id string, listenForNodeName string, listenForGroupName string, onMessageFP OnMessageFct) error {
+func (bus *GBus) Subscribe(id string, listenForNodeName string, listenForGroupName string, onMessageFP OnMessageFct) error {
 
 	var newSubscriber subscriber
 	newSubscriber.id = id
@@ -101,36 +106,36 @@ func (list *SubscriberList) Subscribe(id string, listenForNodeName string, liste
 	newSubscriber.onMessage = onMessageFP
 
 	// append it to the list
-	list.lock.Lock()
+	bus.lock.Lock()
 
-	list.log.WithFields(logrus.Fields{
+	bus.log.WithFields(logrus.Fields{
 		"sid":                   id,
 		"subscriberNodeTarget":  newSubscriber.filter.NodeTarget,
 		"subscriberGroupTarget": newSubscriber.filter.GroupTarget,
 	}).Debug("Subscribe")
 
-	list.list = append(list.list, newSubscriber)
-	list.lock.Unlock()
+	bus.subscribers = append(bus.subscribers, newSubscriber)
+	bus.lock.Unlock()
 
 	return nil
 }
 
 // UnSubscribeID will remove an listener function from the subscriber list
-func (list *SubscriberList) UnSubscribeID(id string) error {
-	return list.unSubscribeFull(id, "", "")
+func (bus *GBus) UnSubscribeID(id string) error {
+	return bus.unSubscribeFull(id, "", "")
 }
 
 // UnSubscribe will remove an listener function from the subscriber list
-func (list *SubscriberList) UnSubscribe(listenForNodeName string, listenForGroupName string) error {
-	return list.unSubscribeFull("", listenForNodeName, listenForGroupName)
+func (bus *GBus) UnSubscribe(listenForNodeName string, listenForGroupName string) error {
+	return bus.unSubscribeFull("", listenForNodeName, listenForGroupName)
 }
 
-func (list *SubscriberList) unSubscribeFull(id string, listenForNodeName string, listenForGroupName string) error {
+func (bus *GBus) unSubscribeFull(id string, listenForNodeName string, listenForGroupName string) error {
 
 	var newList []subscriber
 
-	list.lock.Lock()
-	for _, subscriber := range list.list {
+	bus.lock.Lock()
+	for _, subscriber := range bus.subscribers {
 
 		if id != "" && subscriber.id != id {
 			newList = append(newList, subscriber)
@@ -147,21 +152,21 @@ func (list *SubscriberList) unSubscribeFull(id string, listenForNodeName string,
 			continue
 		}
 
-		list.log.WithFields(logrus.Fields{
+		bus.log.WithFields(logrus.Fields{
 			"sid": subscriber.id,
 		}).Debug("UnSubscribe")
 	}
-	list.list = newList
-	list.lock.Unlock()
+	bus.subscribers = newList
+	bus.lock.Unlock()
 
 	return nil
 }
 
 // PublishPayload [BLOCKING] will place a new message to the bus
 // for socket-connections it will write directly to the socket itselfe
-func (list *SubscriberList) PublishPayload(nodeSource, nodeTarget, groupSource, groupTarget, command, payload string) error {
+func (bus *GBus) PublishPayload(nodeSource, nodeTarget, groupSource, groupTarget, command, payload string) error {
 
-	list.PublishMsg(Msg{
+	bus.PublishMsg(Msg{
 		NodeSource:  nodeSource,
 		NodeTarget:  nodeTarget,
 		GroupSource: groupSource,
@@ -175,7 +180,7 @@ func (list *SubscriberList) PublishPayload(nodeSource, nodeTarget, groupSource, 
 
 // PublishMsg [BLOCKING] will place a new message to the bus
 // for socket-connections it will write directly to the socket itselfe
-func (list *SubscriberList) PublishMsg(message Msg) error {
-	list.messages <- &message
+func (bus *GBus) PublishMsg(message Msg) error {
+	bus.messages <- &message
 	return nil
 }
