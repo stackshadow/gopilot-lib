@@ -49,3 +49,7 @@ func Init() {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
 }
+
+func EnableDebug() {
+	isDebug = true
+}
