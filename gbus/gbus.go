@@ -19,8 +19,9 @@ along with gopilot.  If not, see <http://www.gnu.org/licenses/>.
 package gbus
 
 import (
-	"github.com/sirupsen/logrus"
 	"sync"
+
+	"github.com/sirupsen/logrus"
 )
 
 // subscriber represents an subscription to a message ( filter ) on the bus
@@ -42,7 +43,10 @@ type GBus struct {
 	log         *logrus.Entry
 	lock        sync.Mutex
 	subscribers []subscriber
-	messages    chan *Msg
+
+	// messages
+	lastMsgNo int
+	messages  chan *Msg
 }
 
 // Init the subscriber list
@@ -53,6 +57,9 @@ func (bus *GBus) Init() {
 			"prefix": "SLIST",
 		},
 	)
+
+	// message
+	bus.lastMsgNo = 0
 	bus.messages = make(chan *Msg, 5)
 
 	// start the worker
@@ -67,6 +74,7 @@ func (bus *GBus) onPublishListWorker() {
 		bus.lock.Lock()
 
 		bus.log.WithFields(logrus.Fields{
+			"msgID":               message.id,
 			"message.NodeTarget":  message.NodeTarget,
 			"message.GroupTarget": message.GroupTarget,
 			"message.Command":     message.Command,
@@ -74,21 +82,24 @@ func (bus *GBus) onPublishListWorker() {
 
 		// send it to all subscribers
 		for _, subscriber := range bus.subscribers {
-			if subscriber.filter.NodeTarget != "" && message.NodeTarget != subscriber.filter.NodeTarget {
+			if message.NodeTarget != "" && subscriber.filter.NodeTarget != "" && message.NodeTarget != subscriber.filter.NodeTarget {
 				continue
 			}
-			if subscriber.filter.GroupTarget != "" && message.GroupTarget != subscriber.filter.GroupTarget {
+			if message.GroupTarget != "" && subscriber.filter.GroupTarget != "" && message.GroupTarget != subscriber.filter.GroupTarget {
 				continue
 			}
 
 			bus.log.WithFields(logrus.Fields{
-				"subscriber.id":          subscriber.id,
+				"subID":                  subscriber.id,
 				"subscriber.NodeTarget":  subscriber.filter.NodeTarget,
 				"subscriber.GroupTarget": subscriber.filter.GroupTarget,
 			}).Debug("Message match, call onMessage()")
 
 			subscriber.onMessage(message, message.GroupTarget, message.Command, message.Payload)
 		}
+
+		// finished
+		bus.log.WithFields(logrus.Fields{"msgID": message.id}).Debug("Handle message finished")
 
 		// unlock the list
 		bus.lock.Unlock()
@@ -109,7 +120,7 @@ func (bus *GBus) Subscribe(id string, listenForNodeName string, listenForGroupNa
 	bus.lock.Lock()
 
 	bus.log.WithFields(logrus.Fields{
-		"sid":                   id,
+		"subID":                 newSubscriber.id,
 		"subscriberNodeTarget":  newSubscriber.filter.NodeTarget,
 		"subscriberGroupTarget": newSubscriber.filter.GroupTarget,
 	}).Debug("Subscribe")
@@ -153,7 +164,7 @@ func (bus *GBus) unSubscribeFull(id string, listenForNodeName string, listenForG
 		}
 
 		bus.log.WithFields(logrus.Fields{
-			"sid": subscriber.id,
+			"subID": subscriber.id,
 		}).Debug("UnSubscribe")
 	}
 	bus.subscribers = newList
@@ -181,6 +192,11 @@ func (bus *GBus) PublishPayload(nodeSource, nodeTarget, groupSource, groupTarget
 // PublishMsg [BLOCKING] will place a new message to the bus
 // for socket-connections it will write directly to the socket itselfe
 func (bus *GBus) PublishMsg(message Msg) error {
+
+	// set message id
+	message.id = bus.lastMsgNo
+	bus.lastMsgNo = bus.lastMsgNo + 1
+
 	bus.messages <- &message
 	return nil
 }
