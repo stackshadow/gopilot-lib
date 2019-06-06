@@ -23,8 +23,9 @@ package gbus
 import (
 	"bufio"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"net"
+
+	"github.com/sirupsen/logrus"
 )
 
 // SocketFileName is the default socket-filename
@@ -40,48 +41,48 @@ type SocketConnection struct {
 }
 
 // Init will init an socket-connection
-func (s *SocketConnection) Init(socket net.Conn, id string) {
+func (con *SocketConnection) Init(socket net.Conn, id string) {
 
-	s.ID = id
-	s.socket = socket
-	s.logging = logrus.WithFields(
+	con.ID = id
+	con.socket = socket
+	con.logging = logrus.WithFields(
 		logrus.Fields{
 			"prefix": "SCON",
-			"cid":    s.ID,
+			"conID":  con.ID,
 		},
 	)
 
-	s.logging.Debug("New Socket-connection created")
+	con.logging.Debug("New Socket-connection created")
 }
 
 // ReadMessage will call the onMessage if an message is recieved
 // this function is synchron ( blocked if no message is aviable ! )
-func (s *SocketConnection) ReadMessage() (Msg, error) {
+func (con *SocketConnection) ReadMessage() (Msg, error) {
 
-	s.logging.Debug("Wait for message")
+	con.logging.Debug("Wait for message")
 
-	jsonString, _ := bufio.NewReader(s.socket).ReadString('\n')
-	s.logging.WithFields(logrus.Fields{
+	jsonString, _ := bufio.NewReader(con.socket).ReadString('\n')
+	con.logging.WithFields(logrus.Fields{
 		"raw": jsonString,
 	},
 	).Debug("Raw message")
 
 	newMessage, err := FromJSONString(jsonString)
 	if err != nil {
-		s.logging.Error(err)
+		con.logging.Error(err)
 		return Msg{}, err
 	}
 
 	// we tag the message with our connection id, so that we WONT send it out again
-	newMessage.id = s.lastID
-	newMessage.context = s.ID
+	newMessage.id = con.lastID
+	newMessage.context = con.ID
 
 	// iterate id
-	s.lastID = s.lastID + 1
+	con.lastID = con.lastID + 1
 
 	// debug
-	s.logging.WithFields(logrus.Fields{
-		"mid":         newMessage.id,
+	con.logging.WithFields(logrus.Fields{
+		"msgID":       newMessage.id,
 		"source":      newMessage.NodeSource,
 		"sourceGroup": newMessage.GroupSource,
 		"target":      newMessage.NodeTarget,
@@ -94,12 +95,12 @@ func (s *SocketConnection) ReadMessage() (Msg, error) {
 }
 
 // SendMessage will send a message over the socket connection
-func (s *SocketConnection) SendMessage(message Msg) {
+func (con *SocketConnection) SendMessage(message Msg) {
 
 	// we don't send messages that comes from us
-	if message.context == s.ID {
-		s.logging.WithFields(logrus.Fields{
-			"mid": message.id,
+	if message.context == con.ID {
+		con.logging.WithFields(logrus.Fields{
+			"msgID": message.id,
 		},
 		).Debug("We dont send to sender")
 
@@ -107,16 +108,15 @@ func (s *SocketConnection) SendMessage(message Msg) {
 	}
 
 	// iterate id
-	message.id = s.lastID
-	s.lastID = s.lastID + 1
+	message.id = con.lastID
+	con.lastID = con.lastID + 1
 
 	// convert to string
 	newMessageString, _ := message.ToJSONString()
 
 	// debug
-	s.logging.WithFields(logrus.Fields{
-		"cid":         s.ID,
-		"mid":         message.id,
+	con.logging.WithFields(logrus.Fields{
+		"msgID":       message.id,
 		"source":      message.NodeSource,
 		"sourceGroup": message.GroupSource,
 		"target":      message.NodeTarget,
@@ -126,21 +126,17 @@ func (s *SocketConnection) SendMessage(message Msg) {
 	).Debug("Send Message")
 
 	// send it
-	fmt.Fprintf(s.socket, "%s\n", newMessageString)
+	fmt.Fprintf(con.socket, "%s\n", newMessageString)
 }
 
 // Close will close the current socket connection
-func (s *SocketConnection) Close() {
+func (con *SocketConnection) Close() {
 
 	// debug
-	s.logging.WithFields(logrus.Fields{
-		"cid": s.ID,
-	},
-	).Info("Close connection")
-
-	s.socket.Close()
+	con.logging.Info("Close connection")
+	con.socket.Close()
 }
 
-func (s *SocketConnection) onPublish(message *Msg, group, command, payload string) {
-	s.SendMessage(*message)
+func (con *SocketConnection) onPublish(message *Msg, group, command, payload string) {
+	con.SendMessage(*message)
 }
