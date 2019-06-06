@@ -36,6 +36,12 @@ type Socket struct {
 	isServer       bool
 }
 
+// SocketCallbacks provide different callbacks
+// OnConnect - Will fire if you successful connect to an socket
+type SocketCallbacks struct {
+	OnConnect func( /*remoteNodeName*/ string)
+}
+
 // Init will init an new socketbus
 func (bus *Socket) Init() {
 
@@ -125,68 +131,67 @@ func (socket *Socket) Serve(bus *GBus, connectionString string) error {
 
 }
 
-// Connect [GOROUTINE] will connect to an server and return the remote Node-Name
-func (socket *Socket) Connect(bus *GBus, connectionString string, filter Msg) (string, error) {
+// Connect [BLOCKING] will connect to an server and return the remote Node-Name
+func (socket *Socket) Connect(bus *GBus, connectionString string, filter Msg, callbacks SocketCallbacks) error {
 
 	var conn net.Conn
 	var err error
 
+	// this runs forever
 	for {
-		conn, err = net.Dial("unix", connectionString)
+
+		for {
+			conn, err = net.Dial("unix", connectionString)
+			if err != nil {
+				bus.log.Error(err)
+				time.Sleep(10 * time.Second)
+			}
+
+			if conn != nil {
+				break
+			}
+		}
+
+		// create a new socket connection
+		var con SocketConnection
+		con.Init(conn, uuid.New().String())
+
+		// ################################# handshake #################################
+		// we wait for HELO
+		socket.log.Debug("Wait for HELO-Message")
+		heloMessage, err := con.ReadMessage()
 		if err != nil {
+			con.Close()
 			bus.log.Error(err)
-			time.Sleep(10 * time.Second)
+			return err
+		}
+		if heloMessage.Command != "HELO" {
+			con.Close()
+			errNoHelo := errors.New("No OLEH was recieved")
+			bus.log.Error(errNoHelo)
+			return errNoHelo
+		}
+		socket.log.Debug("HELO received")
+
+		// and informate the server about what we listen
+		con.SendMessage(Msg{
+			NodeSource:  filter.NodeSource,
+			GroupSource: filter.GroupSource,
+			NodeTarget:  heloMessage.NodeTarget,
+			GroupTarget: "",
+			Command:     "OLEH",
+		})
+
+		// callback
+		if callbacks.OnConnect != nil {
+			callbacks.OnConnect(heloMessage.NodeSource)
 		}
 
-		if conn != nil {
-			break
-		}
+		// we subscribe to the bus
+		bus.Subscribe(con.ID, heloMessage.NodeSource, heloMessage.GroupSource, con.onPublish)
+
+		socket.eventLoopWaitForMessage(bus, &con)
 	}
-
-	// create a new socket connection
-	var con SocketConnection
-	con.Init(conn, uuid.New().String())
-
-	// ################################# handshake #################################
-	// we wait for HELO
-	socket.log.Debug("Wait for HELO-Message")
-	heloMessage, err := con.ReadMessage()
-	if err != nil {
-		con.Close()
-		bus.log.Error(err)
-		return "", err
-	}
-	if heloMessage.Command != "HELO" {
-		con.Close()
-		errNoHelo := errors.New("No OLEH was recieved")
-		bus.log.Error(errNoHelo)
-		return "", errNoHelo
-	}
-	socket.log.Debug("HELO received")
-
-	// and informate the server about what we listen
-	con.SendMessage(Msg{
-		NodeSource:  filter.NodeSource,
-		GroupSource: filter.GroupSource,
-		NodeTarget:  heloMessage.NodeTarget,
-		GroupTarget: "",
-		Command:     "OLEH",
-	})
-
-	// we subscribe to the bus
-	bus.Subscribe(con.ID, heloMessage.NodeSource, heloMessage.GroupSource, con.onPublish)
-
-	// add it to the list
-	/*
-		bus.sessionListMutex.Lock()
-		con.logging.Debug(fmt.Sprintf("Register '%s'", con.ID))
-		bus.remoteConnectionList[con.ID] = &con
-		bus.sessionListMutex.Unlock()
-	*/
-
-	go socket.eventLoopWaitForMessage(bus, &con)
-
-	return heloMessage.NodeSource, nil
 }
 
 func (socket *Socket) eventLoopWaitForMessage(bus *GBus, con *SocketConnection) {
