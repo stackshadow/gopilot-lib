@@ -29,7 +29,7 @@ import (
 	"time"
 )
 
-// Socketbus type
+// Socket type
 type Socket struct {
 	log            *logrus.Entry
 	serverListener net.Listener
@@ -43,9 +43,9 @@ type SocketCallbacks struct {
 }
 
 // Init will init an new socketbus
-func (bus *Socket) Init() {
+func (socket *Socket) Init() {
 
-	bus.log = logrus.WithFields(
+	socket.log = logrus.WithFields(
 		logrus.Fields{
 			"prefix": "SOCKETBUS",
 		},
@@ -114,7 +114,6 @@ func (socket *Socket) Serve(bus *GBus, connectionString string) error {
 			conn.Close()
 			continue
 		}
-		socket.log.Debug("OLEH received")
 
 		/*
 			bus.socketConnectionsLock.Lock()
@@ -125,6 +124,11 @@ func (socket *Socket) Serve(bus *GBus, connectionString string) error {
 		// we subscribe to the bus
 		bus.Subscribe(con.ID, ehloMessage.NodeSource, ehloMessage.GroupSource, con.onPublish)
 
+		socket.log.Debug("")
+		socket.log.Debug("############################ Handshake finished ############################")
+		socket.log.Debug("")
+		// ############################ handshake finished #############################
+
 		// start goroutine which handle incoming messages
 		go socket.eventLoopWaitForMessage(bus, &con)
 	}
@@ -132,7 +136,7 @@ func (socket *Socket) Serve(bus *GBus, connectionString string) error {
 }
 
 // Connect [BLOCKING] will connect to an server and return the remote Node-Name
-func (socket *Socket) Connect(bus *GBus, connectionString string, filter Msg, callbacks SocketCallbacks) error {
+func (socket *Socket) Connect(bus *GBus, connectionString, listenForNodeName, listenForGroupName string, callbacks SocketCallbacks) error {
 
 	var conn net.Conn
 	var err error
@@ -171,12 +175,11 @@ func (socket *Socket) Connect(bus *GBus, connectionString string, filter Msg, ca
 			bus.log.Error(errNoHelo)
 			return errNoHelo
 		}
-		socket.log.Debug("HELO received")
 
 		// and informate the server about what we listen
 		con.SendMessage(Msg{
-			NodeSource:  filter.NodeSource,
-			GroupSource: filter.GroupSource,
+			NodeSource:  listenForNodeName,
+			GroupSource: listenForGroupName,
 			NodeTarget:  heloMessage.NodeTarget,
 			GroupTarget: "",
 			Command:     "OLEH",
@@ -189,6 +192,11 @@ func (socket *Socket) Connect(bus *GBus, connectionString string, filter Msg, ca
 
 		// we subscribe to the bus
 		bus.Subscribe(con.ID, heloMessage.NodeSource, heloMessage.GroupSource, con.onPublish)
+
+		socket.log.Debug("")
+		socket.log.Debug("############################ Handshake finished ############################")
+		socket.log.Debug("")
+		// ############################ handshake finished #############################
 
 		socket.eventLoopWaitForMessage(bus, &con)
 	}
