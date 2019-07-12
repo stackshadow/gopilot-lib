@@ -35,14 +35,24 @@ type subscriber struct {
 	onMessage   OnMessageFct
 }
 
+// SubscriberList represents all subscribers in the list
+type SubscriberList struct {
+	Subscriber map[string]SubscriberListEntry
+}
+
+type SubscriberListEntry struct {
+	NodeTarget  string `json:"nodeTarget"`
+	GroupTarget string `json:"groupTarget"`
+}
+
 // callbacks
 type OnMessageFct func(*Msg, string /* group */, string /*command*/, string /*payload*/) // For example: onMessage(message *msgbus.Msg, group, command, payload string)
 
 // SubscriberList represent the list for all subcribers
 type GBus struct {
-	log         *logrus.Entry
-	lock        sync.Mutex
-	subscribers []subscriber
+	log             *logrus.Entry
+	subscribersLock sync.Mutex
+	subscribers     []subscriber
 
 	// messages
 	lastMsgNo int
@@ -71,7 +81,7 @@ func (bus *GBus) onPublishListWorker() {
 	for message := range bus.messages {
 
 		// lock the list
-		bus.lock.Lock()
+		bus.subscribersLock.Lock()
 
 		bus.log.WithFields(logrus.Fields{
 			"msgID":               message.id,
@@ -102,7 +112,7 @@ func (bus *GBus) onPublishListWorker() {
 		bus.log.WithFields(logrus.Fields{"msgID": message.id}).Debug("Handle message finished")
 
 		// unlock the list
-		bus.lock.Unlock()
+		bus.subscribersLock.Unlock()
 	}
 }
 
@@ -117,7 +127,7 @@ func (bus *GBus) Subscribe(id string, listenForNodeName string, listenForGroupNa
 	newSubscriber.onMessage = onMessageFP
 
 	// append it to the list
-	bus.lock.Lock()
+	bus.subscribersLock.Lock()
 
 	bus.log.WithFields(logrus.Fields{
 		"subID":                 newSubscriber.id,
@@ -126,7 +136,7 @@ func (bus *GBus) Subscribe(id string, listenForNodeName string, listenForGroupNa
 	}).Debug("Subscribe")
 
 	bus.subscribers = append(bus.subscribers, newSubscriber)
-	bus.lock.Unlock()
+	bus.subscribersLock.Unlock()
 
 	return nil
 }
@@ -145,7 +155,7 @@ func (bus *GBus) unSubscribeFull(id string, listenForNodeName string, listenForG
 
 	var newList []subscriber
 
-	bus.lock.Lock()
+	bus.subscribersLock.Lock()
 	for _, subscriber := range bus.subscribers {
 
 		if id != "" && subscriber.id != id {
@@ -168,7 +178,7 @@ func (bus *GBus) unSubscribeFull(id string, listenForNodeName string, listenForG
 		}).Debug("UnSubscribe")
 	}
 	bus.subscribers = newList
-	bus.lock.Unlock()
+	bus.subscribersLock.Unlock()
 
 	return nil
 }
@@ -199,4 +209,24 @@ func (bus *GBus) PublishMsg(message Msg) error {
 
 	bus.messages <- &message
 	return nil
+}
+
+// SubscriberListGet return a list with all subscribers
+func (bus *GBus) SubscriberListGet() SubscriberList {
+
+	var newSubscriberList SubscriberList
+	newSubscriberList.Subscriber = make(map[string]SubscriberListEntry)
+
+	// bus.subscribersLock.Lock()
+	for _, subscriber := range bus.subscribers {
+
+		newSubscriberList.Subscriber[subscriber.id] = SubscriberListEntry{
+			NodeTarget:  subscriber.filter.NodeTarget,
+			GroupTarget: subscriber.filter.GroupTarget,
+		}
+
+	}
+	// bus.subscribersLock.Unlock()
+
+	return newSubscriberList
 }
