@@ -28,8 +28,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// SocketFileName is the default socket-filename
-const SocketFileName string = "/tmp/gopilot.sock"
 const recvBufferSize int = 2048
 
 // SocketConnection represent an current socket-session ( socket connection )

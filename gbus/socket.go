@@ -29,11 +29,15 @@ import (
 	"time"
 )
 
+// SocketFileName is the default socket-filename
+const SocketFileName string = "/tmp/gopilot.sock"
+
 // Socket type
 type Socket struct {
 	log            *logrus.Entry
 	serverListener net.Listener
 	isServer       bool
+	isConnected    bool
 }
 
 // SocketCallbacks provide different callbacks
@@ -89,7 +93,7 @@ func (socket *Socket) Serve(bus *GBus, connectionString string) error {
 		// create a new session
 		// the filter is empty, as server we accept every message
 		var con SocketConnection
-		con.Init(conn, connectionID)
+		con.Init(conn, "socket-"+connectionID)
 
 		// ################################# handshake #################################
 		// send a helo to the client
@@ -138,6 +142,7 @@ func (socket *Socket) Serve(bus *GBus, connectionString string) error {
 // Connect [BLOCKING] will connect to an server and return the remote Node-Name
 func (socket *Socket) Connect(bus *GBus, connectionString, listenForNodeName, listenForGroupName string, callbacks SocketCallbacks) error {
 
+	socket.isConnected = false
 	var conn net.Conn
 	var err error
 
@@ -158,7 +163,7 @@ func (socket *Socket) Connect(bus *GBus, connectionString, listenForNodeName, li
 
 		// create a new socket connection
 		var con SocketConnection
-		con.Init(conn, uuid.New().String())
+		con.Init(conn, "socket-"+uuid.New().String())
 
 		// ################################# handshake #################################
 		// we wait for HELO
@@ -185,7 +190,8 @@ func (socket *Socket) Connect(bus *GBus, connectionString, listenForNodeName, li
 			Command:     "OLEH",
 		})
 
-		// callback
+		// callback - connected
+		socket.isConnected = true
 		if callbacks.OnConnect != nil {
 			callbacks.OnConnect(heloMessage.NodeSource)
 		}
