@@ -59,7 +59,7 @@ type GBus struct {
 	messages  chan *Msg
 }
 
-// Init the subscriber list
+// Init [NONBLOCKING] the message-bus, you need to call Run() to start it
 func (bus *GBus) Init() {
 
 	bus.log = logrus.WithFields(
@@ -72,7 +72,10 @@ func (bus *GBus) Init() {
 	bus.lastMsgNo = 0
 	bus.messages = make(chan *Msg, 5)
 
-	// start the worker
+}
+
+// Run [NONBLOCKING] will start the bus
+func (bus *GBus) Run() {
 	go bus.onPublishListWorker()
 }
 

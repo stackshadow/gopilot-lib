@@ -19,10 +19,11 @@ along with gopilot.  If not, see <http://www.gnu.org/licenses/>.
 package gbus
 
 import (
-	"github.com/sirupsen/logrus"
-	"github.com/stackshadow/gopilot-lib/clog"
 	"testing"
 	"time"
+
+	"github.com/sirupsen/logrus"
+	"gitlab.com/gopilot/lib/clog"
 )
 
 var bus GBus
@@ -34,6 +35,7 @@ func TestInit(t *testing.T) {
 	clog.Init()
 
 	bus.Init()
+	bus.Run()
 
 	isClosed := false
 
